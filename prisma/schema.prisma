@@ -1,0 +1,304 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// USUARIOS Y AUTENTICACIÓN
+// ─────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  password      String?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts Account[]
+  sessions Session[]
+  stores   Store[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// ─────────────────────────────────────────
+// PLANES Y SUSCRIPCIONES
+// ─────────────────────────────────────────
+
+enum PlanType {
+  FREE
+  STARTER
+  PRO
+  EXPERT
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELLED
+}
+
+model Subscription {
+  id        String             @id @default(cuid())
+  storeId   String             @unique
+  plan      PlanType           @default(FREE)
+  status    SubscriptionStatus @default(TRIALING)
+  trialEnds DateTime?
+  currentPeriodEnd DateTime?
+  mpSubscriptionId String?     // Mercado Pago subscription ID
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+// ─────────────────────────────────────────
+// TIENDAS
+// ─────────────────────────────────────────
+
+model Store {
+  id           String   @id @default(cuid())
+  userId       String
+  slug         String   @unique
+  name         String
+  description  String?  @db.Text
+  category     String?
+  logoUrl      String?
+  bannerUrl    String?
+  primaryColor String   @default("#0ABF6E")
+  whatsapp     String   // Número completo con código de país
+  address      String?
+  city         String?
+  country      String   @default("AR")
+  currency     String   @default("ARS")
+  minOrder     Int      @default(0)
+  active       Boolean  @default(true)
+  customDomain String?  @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  products     Product[]
+  categories   Category[]
+  orders       Order[]
+  subscription Subscription?
+  coupons      Coupon[]
+  views        StoreView[]
+  notifications NotificationTemplate?
+
+  @@index([userId])
+  @@index([slug])
+  @@map("stores")
+}
+
+// ─────────────────────────────────────────
+// CATÁLOGO
+// ─────────────────────────────────────────
+
+model Category {
+  id       String    @id @default(cuid())
+  storeId  String
+  name     String
+  emoji    String?
+  position Int       @default(0)
+  active   Boolean   @default(true)
+
+  store    Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@index([storeId])
+  @@map("categories")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  storeId     String
+  categoryId  String?
+  name        String
+  description String?  @db.Text
+  price       Int      // En centavos para evitar floats
+  comparePrice Int?    // Precio tachado (oferta)
+  imageUrl    String?
+  emoji       String?
+  available   Boolean  @default(true)
+  featured    Boolean  @default(false)
+  position    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  store     Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  category  Category?  @relation(fields: [categoryId], references: [id])
+  orderItems OrderItem[]
+
+  @@index([storeId])
+  @@index([categoryId])
+  @@map("products")
+}
+
+// ─────────────────────────────────────────
+// PEDIDOS
+// ─────────────────────────────────────────
+
+enum OrderStatus {
+  NEW
+  CONFIRMED
+  PREPARING
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+model Order {
+  id           String      @id @default(cuid())
+  storeId      String
+  number       Int         // Número legible: #2341
+  customerName String
+  customerPhone String?
+  customerNote String?     @db.Text
+  total        Int         // En centavos
+  subtotal     Int         @default(0) // Antes del descuento
+  discount     Int         @default(0) // Monto del descuento
+  couponCode   String?     // Código del cupón usado
+  status       OrderStatus @default(NEW)
+  waMessageId  String?     // Para tracking futuro
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  store Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  items OrderItem[]
+
+  @@index([storeId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String @id @default(cuid())
+  orderId   String
+  productId String
+  name      String // Snapshot del nombre en el momento del pedido
+  price     Int    // Snapshot del precio
+  qty       Int
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+// ─────────────────────────────────────────
+// CUPONES DE DESCUENTO
+// ─────────────────────────────────────────
+
+enum CouponType {
+  PERCENT
+  FIXED
+}
+
+model Coupon {
+  id        String     @id @default(cuid())
+  storeId   String
+  code      String
+  type      CouponType
+  value     Int        // % o centavos según type
+  minOrder  Int        @default(0)
+  maxUses   Int?       // null = ilimitado
+  usedCount Int        @default(0)
+  active    Boolean    @default(true)
+  expiresAt DateTime?
+  createdAt DateTime   @default(now())
+
+  store Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  uses  CouponUse[]
+
+  @@unique([storeId, code])
+  @@index([storeId])
+  @@map("coupons")
+}
+
+model CouponUse {
+  id        String   @id @default(cuid())
+  couponId  String
+  orderId   String   @unique
+  createdAt DateTime @default(now())
+
+  coupon Coupon @relation(fields: [couponId], references: [id])
+
+  @@map("coupon_uses")
+}
+
+// ─────────────────────────────────────────
+// NOTIFICACIONES WHATSAPP
+// ─────────────────────────────────────────
+
+model NotificationTemplate {
+  id        String   @id @default(cuid())
+  storeId   String   @unique
+  orderNew      String?  @db.Text // Template para pedido nuevo
+  orderConfirm  String?  @db.Text // Template para pedido confirmado
+  orderReady    String?  @db.Text // Template para pedido listo
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@map("notification_templates")
+}
+
+// ─────────────────────────────────────────
+// VISITAS / ANALYTICS
+// ─────────────────────────────────────────
+
+model StoreView {
+  id        String   @id @default(cuid())
+  storeId   String
+  source    String?  // instagram, whatsapp, direct, etc.
+  createdAt DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@index([createdAt])
+  @@map("store_views")
+}

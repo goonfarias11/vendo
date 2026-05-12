@@ -1,0 +1,45 @@
+/* src/app/globals.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --green: #0abf6e;
+    --green-dark: #07944f;
+    --green-pale: #e8faf2;
+    --ink: #0e1117;
+    --ink-soft: #444850;
+    --ink-muted: #8a9099;
+    --surface: #f7f8fa;
+    --border: rgba(0, 0, 0, 0.08);
+    --wa: #25d366;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-white text-ink;
+  }
+}
+
+@layer utilities {
+  .font-serif {
+    font-family: var(--font-serif), Georgia, serif;
+  }
+
+  .font-sans {
+    font-family: var(--font-sans), system-ui, sans-serif;
+  }
+
+  /* Ocultar scrollbar manteniendo funcionalidad */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
